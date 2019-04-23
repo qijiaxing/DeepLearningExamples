@@ -469,7 +469,7 @@ def _decode_record(record, name_to_features):
   for name in list(example.keys()):
     t = example[name]
     if t.dtype == tf.int64:
-      t = tf.to_int32(t)
+      t = tf.cast(t, tf.int32)
     example[name] = t
 
   return example
@@ -490,7 +490,7 @@ def main(_):
 
   bert_config = modeling.BertConfig.from_json_file(FLAGS.bert_config_file)
 
-  tf.gfile.MakeDirs(FLAGS.output_dir)
+# tf.gfile.MakeDirs(FLAGS.output_dir)
 
   input_files = []
   for input_pattern in FLAGS.input_file.split(","):
@@ -588,5 +588,5 @@ def main(_):
 if __name__ == "__main__":
   flags.mark_flag_as_required("input_file")
   flags.mark_flag_as_required("bert_config_file")
-  flags.mark_flag_as_required("output_dir")
+# flags.mark_flag_as_required("output_dir")
   tf.app.run()
