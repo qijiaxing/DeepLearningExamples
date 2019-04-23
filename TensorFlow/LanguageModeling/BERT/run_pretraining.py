@@ -116,6 +116,8 @@ flags.DEFINE_bool("use_xla", False, "Whether to enable XLA JIT compilation.")
 
 flags.DEFINE_bool("amp", False, "Whether to enable AMP ops.")
 
+flags.DEFINE_bool("profiling", False, "Whether to profiling.")
+
 # report samples/sec, total loss and learning rate during training
 class _LogSessionRunHook(tf.train.SessionRunHook):
   def __init__(self, global_batch_size, display_every=10, hvd_rank=-1):
@@ -537,9 +539,9 @@ def main(_):
   if FLAGS.report_loss:
     global_batch_size = FLAGS.train_batch_size if not FLAGS.horovod else FLAGS.train_batch_size*hvd.size()
     training_hooks.append(_LogSessionRunHook(global_batch_size,16,-1 if not FLAGS.horovod else hvd.rank()))
-
-  # Add profiler hook
-  training_hooks.append(tf.train.ProfilerHook( save_steps=64, output_dir=FLAGS.output_dir, show_dataflow=True, show_memory=False))
+  if FLAGS.profiling:
+    training_hooks.append(tf.train.ProfilerHook(
+      save_steps=64, output_dir=FLAGS.output_dir, show_dataflow=True, show_memory=False))
 
   # If TPU is not available, this will fall back to normal Estimator on CPU
   # or GPU.
