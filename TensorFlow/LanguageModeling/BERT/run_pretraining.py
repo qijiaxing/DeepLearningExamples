@@ -124,9 +124,9 @@ class _LogSessionRunHook(tf.train.SessionRunHook):
     self.hvd_rank = hvd_rank
   def after_create_session(self, session, coord):
     if FLAGS.use_fp16 or FLAGS.amp:
-      print('  Step samples/sec   MLM Loss  NSP Loss  Loss  Learning-rate  Loss-scaler')
+      print('        Step samples/sec   MLM Loss   NSP Loss   Loss  Learning-rate  Loss-scaler')
     else:
-      print('  Step samples/sec   MLM Loss  NSP Loss  Loss  Learning-rate')
+      print('        Step samples/sec   MLM Loss   NSP Loss   Loss  Learning-rate')
     self.elapsed_secs = 0.
     self.count = 0
   def before_run(self, run_context):
@@ -498,19 +498,14 @@ def main(_):
   for input_file in input_files:
     tf.logging.info("  %s" % input_file)
 
-  tpu_cluster_resolver = None
-  if FLAGS.use_tpu and FLAGS.tpu_name:
-    tpu_cluster_resolver = tf.contrib.cluster_resolver.TPUClusterResolver(
-        FLAGS.tpu_name, zone=FLAGS.tpu_zone, project=FLAGS.gcp_project)
-
   config = tf.ConfigProto()
-  if FLAGS.horovod: 
+  if FLAGS.horovod:
     config.gpu_options.visible_device_list = str(hvd.local_rank())
-  if FLAGS.use_xla: 
+  if FLAGS.use_xla:
     config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
   is_per_host = tf.contrib.tpu.InputPipelineConfig.PER_HOST_V2
   run_config = tf.contrib.tpu.RunConfig(
-      cluster=tpu_cluster_resolver,
+      cluster=None,
       master=FLAGS.master,
       model_dir=FLAGS.output_dir,
       session_config=config,
@@ -541,7 +536,10 @@ def main(_):
     training_hooks.append(hvd.BroadcastGlobalVariablesHook(0))
   if FLAGS.report_loss:
     global_batch_size = FLAGS.train_batch_size if not FLAGS.horovod else FLAGS.train_batch_size*hvd.size()
-    training_hooks.append(_LogSessionRunHook(global_batch_size,1,-1 if not FLAGS.horovod else hvd.rank()))
+    training_hooks.append(_LogSessionRunHook(global_batch_size,16,-1 if not FLAGS.horovod else hvd.rank()))
+
+  # Add profiler hook
+  training_hooks.append(tf.train.ProfilerHook( save_steps=64, output_dir=FLAGS.output_dir, show_dataflow=True, show_memory=False))
 
   # If TPU is not available, this will fall back to normal Estimator on CPU
   # or GPU.
