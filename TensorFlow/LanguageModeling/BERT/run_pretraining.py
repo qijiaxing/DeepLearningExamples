@@ -125,10 +125,11 @@ class _LogSessionRunHook(tf.train.SessionRunHook):
     self.display_every = display_every
     self.hvd_rank = hvd_rank
   def after_create_session(self, session, coord):
-    if FLAGS.use_fp16 or FLAGS.amp:
-      print('        Step samples/sec   MLM Loss   NSP Loss   Loss  Learning-rate  Loss-scaler')
-    else:
-      print('        Step samples/sec   MLM Loss   NSP Loss   Loss  Learning-rate')
+    if self.hvd_rank <= 0:
+      if FLAGS.use_fp16 or FLAGS.amp:
+        print('        Step samples/sec   MLM Loss   NSP Loss   Loss  Learning-rate  Loss-scaler')
+      else:
+        print('        Step samples/sec   MLM Loss   NSP Loss   Loss  Learning-rate')
     self.elapsed_secs = 0.
     self.count = 0
   def before_run(self, run_context):
@@ -423,6 +424,7 @@ def input_fn_builder(input_files,
     # For training, we want a lot of parallel reading and shuffling.
     # For eval, we want no shuffling and parallel reading doesn't matter.
     if is_training:
+      assert (len(input_files) >= hvd.size()), "Not enough input files!"
       d = tf.data.Dataset.from_tensor_slices(tf.constant(input_files))
       if hvd is not None: d = d.shard(hvd.size(), hvd.rank())
       d = d.repeat()
@@ -539,7 +541,8 @@ def main(_):
   if FLAGS.report_loss:
     global_batch_size = FLAGS.train_batch_size if not FLAGS.horovod else FLAGS.train_batch_size*hvd.size()
     training_hooks.append(_LogSessionRunHook(global_batch_size,16,-1 if not FLAGS.horovod else hvd.rank()))
-  if FLAGS.profiling:
+  if FLAGS.profiling and hvd.rank() == 0:
+    tf.logging.info("Add profilerhook")
     training_hooks.append(tf.train.ProfilerHook(
       save_steps=64, output_dir=FLAGS.output_dir, show_dataflow=True, show_memory=False))
 
