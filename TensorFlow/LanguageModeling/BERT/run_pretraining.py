@@ -234,13 +234,21 @@ def model_fn_builder(bert_config, init_checkpoint, learning_rate,
       else:
         tf.train.init_from_checkpoint(init_checkpoint, assignment_map)
 
-    tf.logging.info("**** Trainable Variables ****")
+    tf.logging.debug("**** Trainable Variables ****")
+    total_volume = 0
     for var in tvars:
       init_string = ""
       if var.name in initialized_variable_names:
         init_string = ", *INIT_FROM_CKPT*"
-      tf.logging.info("  %d :: name = %s, shape = %s%s", 0 if hvd is None else hvd.rank(), var.name, var.shape,
+      tf.logging.debug("  %d :: name = %s, shape = %s%s", 0 if hvd is None else hvd.rank(), var.name, var.shape,
                       init_string)
+      # Count total variable volume
+      shape = var.get_shape()
+      volume = 1
+      for dim in shape:
+        volume *= dim.value
+      total_volume += volume
+    tf.logging.debug("Total volume of trainable variables: {}".format(total_volume))
 
     output_spec = None
     if mode == tf.estimator.ModeKeys.TRAIN:
@@ -424,7 +432,7 @@ def input_fn_builder(input_files,
     # For training, we want a lot of parallel reading and shuffling.
     # For eval, we want no shuffling and parallel reading doesn't matter.
     if is_training:
-      assert (len(input_files) >= hvd.size()), "Not enough input files!"
+      if hvd is not None: assert (len(input_files) >= hvd.size()), "Not enough input files!"
       d = tf.data.Dataset.from_tensor_slices(tf.constant(input_files))
       if hvd is not None: d = d.shard(hvd.size(), hvd.rank())
       d = d.repeat()
@@ -541,10 +549,10 @@ def main(_):
   if FLAGS.report_loss:
     global_batch_size = FLAGS.train_batch_size if not FLAGS.horovod else FLAGS.train_batch_size*hvd.size()
     training_hooks.append(_LogSessionRunHook(global_batch_size,16,-1 if not FLAGS.horovod else hvd.rank()))
-  if FLAGS.profiling and hvd.rank() == 0:
+  if FLAGS.profiling: #and hvd.rank() == 0:
     tf.logging.info("Add profilerhook")
     training_hooks.append(tf.train.ProfilerHook(
-      save_steps=64, output_dir=FLAGS.output_dir, show_dataflow=True, show_memory=False))
+      save_steps=64, output_dir=FLAGS.output_dir, show_dataflow=False, show_memory=False))
 
   # If TPU is not available, this will fall back to normal Estimator on CPU
   # or GPU.

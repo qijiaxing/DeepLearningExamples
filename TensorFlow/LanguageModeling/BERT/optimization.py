@@ -74,7 +74,7 @@ def create_optimizer(loss, init_lr, num_train_steps, num_warmup_steps, use_tpu, 
   else:
     if hvd is not None:
       from horovod.tensorflow.compression import Compression
-      optimizer = hvd.DistributedOptimizer(optimizer, sparse_as_dense=True, compression=Compression.none)
+      optimizer = hvd.DistributedOptimizer(optimizer, sparse_as_dense=True, compression=Compression.fp16)
     if use_fp16 or amp:
       loss_scale_manager = tf.contrib.mixed_precision.ExponentialUpdateLossScaleManager(init_loss_scale=2**32, incr_every_n_steps=1000, decr_every_n_nan_or_inf=2, decr_ratio=0.5)
       optimizer = tf.contrib.mixed_precision.LossScaleOptimizer(optimizer, loss_scale_manager)
@@ -137,6 +137,7 @@ class AdamWeightDecayOptimizer(tf.train.Optimizer):
 
       param_name = self._get_variable_name(param.name)
 
+      # TODO: replace zero init by other init op
       m = tf.get_variable(
           name=param_name + "/adam_m",
           shape=param.shape.as_list(),
@@ -174,7 +175,7 @@ class AdamWeightDecayOptimizer(tf.train.Optimizer):
       next_param = param - update_with_lr
 
       assignments.extend(
-          [param.assign(next_param),
+          [param.assign(next_param),   # TODO: assign_sub
            m.assign(next_m),
            v.assign(next_v)])
     return tf.group(*assignments, name=name)
