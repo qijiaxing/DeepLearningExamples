@@ -214,8 +214,10 @@ def model_fn_builder(bert_config, init_checkpoint, learning_rate,
 
     masked_lm_loss = tf.identity(masked_lm_loss, name="mlm_loss")
     next_sentence_loss = tf.identity(next_sentence_loss, name="nsp_loss")
-    total_loss = masked_lm_loss + next_sentence_loss
-    total_loss = tf.identity(total_loss, name='total_loss')
+    total_loss = tf.add(masked_lm_loss, next_sentence_loss, name="total_loss")
+    tf.summary.scalar("mlm_loss", masked_lm_loss)
+    tf.summary.scalar("nsp_loss", next_sentence_loss)
+    tf.summary.scalar("total_loss", total_loss)
 
     tvars = tf.trainable_variables()
 
@@ -243,7 +245,7 @@ def model_fn_builder(bert_config, init_checkpoint, learning_rate,
       tf.logging.debug("  %d :: name = %s, shape = %s%s", 0 if hvd is None else hvd.rank(), var.name, var.shape,
                       init_string)
       # Count total variable volume
-      shape = var.get_shape()
+      shape = var.get_shape()   # shape.num_elements()
       volume = 1
       for dim in shape:
         volume *= dim.value
@@ -522,6 +524,7 @@ def main(_):
       model_dir=FLAGS.output_dir,
       session_config=config,
       save_checkpoints_steps=FLAGS.save_checkpoints_steps if not FLAGS.horovod or hvd.rank() == 0 else None,
+      keep_checkpoint_max=2,
       tpu_config=tf.contrib.tpu.TPUConfig(
           iterations_per_loop=FLAGS.iterations_per_loop,
           num_shards=FLAGS.num_tpu_cores,
